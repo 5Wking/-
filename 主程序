@@ -1,0 +1,114 @@
+import requests
+import json
+import os
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
+
+class MiMoSecurityAudit:
+    def __init__(self):
+        # MiMo100T API 配置
+        self.api_key = os.getenv("MIMO_API_KEY")
+        self.api_url = os.getenv("MIMO_API_URL", "https://api-mimo100t.xiaomi.com/v1/chat/completions")
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        self.model_name = "MiMo-100T"
+
+    def build_prompt(self, task_type: int, content: str) -> str:
+        """
+        构建不同安全审计场景提示词
+        1: 源代码漏洞审计 2:Web漏洞分析 3:渗透测试报告生成 4:安全日志研判
+        """
+        prompt_map = {
+            1: f"""你是专业网络安全代码审计工程师，严格分析以下源代码，
+精准找出SQL注入、命令执行、文件包含、权限绕过、不安全函数、硬编码密钥等漏洞，
+标注漏洞行数、风险等级、漏洞原理、修复方案：
+### 源码内容 ###
+{content}""",
+            2: f"""对以下Web业务逻辑、接口数据、站点架构进行安全风险分析，
+识别XSS、CSRF、越权访问、未授权访问、接口泄露、弱口令等Web漏洞，
+输出风险点与攻防利用思路：
+### Web业务信息 ###
+{content}""",
+            3: f"""根据下方所有漏洞检测数据，生成标准化专业渗透测试报告，
+包含测试概述、漏洞列表、风险评级、漏洞详情、修复建议、安全加固方案：
+### 漏洞汇总数据 ###
+{content}""",
+            4: f"""智能分析以下服务器安全日志、访问日志、攻击日志，
+识别暴力破解、异常登录、恶意请求、入侵行为、异常流量，
+输出安全态势研判结果与告警等级：
+### 日志内容 ###
+{content}"""
+        }
+        return prompt_map.get(task_type, prompt_map[1])
+
+    def call_mimo_api(self, prompt: str, temperature=0.2) -> dict:
+        """调用MiMo100T大模型API"""
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": "你是资深白帽安全研究员，输出严谨专业、简洁规范的安全审计结果"},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": temperature,
+            "max_tokens": 8192
+        }
+        try:
+            resp = requests.post(self.api_url, headers=self.headers, json=payload, timeout=180)
+            return resp.json()
+        except Exception as e:
+            return {"code": -1, "msg": f"API请求异常：{str(e)}", "data": None}
+
+    def code_vuln_scan(self, source_code: str) -> str:
+        """1. 源代码批量漏洞检测"""
+        prompt = self.build_prompt(1, source_code)
+        res = self.call_mimo_api(prompt)
+        return self.parse_result(res)
+
+    def web_risk_analysis(self, web_info: str) -> str:
+        """2. Web应用漏洞风险分析"""
+        prompt = self.build_prompt(2, web_info)
+        res = self.call_mimo_api(prompt)
+        return self.parse_result(res)
+
+    def auto_gen_report(self, vuln_data: str) -> str:
+        """3. 自动生成渗透测试报告"""
+        prompt = self.build_prompt(3, vuln_data)
+        res = self.call_mimo_api(prompt)
+        return self.parse_result(res)
+
+    def log_security_judge(self, log_content: str) -> str:
+        """4. 安全日志智能研判"""
+        prompt = self.build_prompt(4, log_content)
+        res = self.call_mimo_api(prompt)
+        return self.parse_result(res)
+
+    def parse_result(self, api_result: dict) -> str:
+        """解析MiMo API返回结果"""
+        if api_result.get("choices"):
+            return api_result["choices"][0]["message"]["content"]
+        return f"调用失败：{json.dumps(api_result, ensure_ascii=False)}"
+
+
+if __name__ == "__main__":
+    # 初始化审计工具
+    audit_tool = MiMoSecurityAudit()
+
+    # ========== 测试示例 1：代码漏洞审计 ==========
+    test_code = """
+<?php
+$uid = $_GET['id'];
+$sql = "select * from user where id=$uid";
+mysql_query($sql);
+?>
+"""
+    print("===== 源代码漏洞审计结果 =====")
+    print(audit_tool.code_vuln_scan(test_code))
+
+    # ========== 测试示例 2：日志研判 ==========
+    test_log = "192.168.1.100 多次尝试admin账号密码登录，连续失败20次"
+    print("\n===== 安全日志研判结果 =====")
+    print(audit_tool.log_security_judge(test_log))

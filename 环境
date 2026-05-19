@@ -1,0 +1,4 @@
+# 小米MiMo100T API密钥
+MIMO_API_KEY=你的MiMo100T开放平台API密钥
+# 模型接口地址
+MIMO_API_URL=https://api-mimo100t.xiaomi.com/v1/chat/completions
